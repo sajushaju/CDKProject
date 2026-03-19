@@ -6,20 +6,30 @@ from aws_cdk import (
     aws_rds as rds,
     aws_lambda as _lambda,
     aws_apigateway as apigw,
+    aws_s3 as s3,
+    aws_iam as iam,
     BundlingOptions,
 )
 from constructs import Construct
-
 
 class CdkApiPostgresStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # 1. Create a VPC (Network)
-        # This creates the private space for your DB and Lambda to talk safely
         vpc = ec2.Vpc(self, "MyApiVpc", max_azs=2)
 
-        # 2. Create the PostgreSQL Database
+        # 2. Create the S3 Bucket for Profile Images
+        # This is the "Storage Room" for your .jpg files
+        image_bucket = s3.Bucket(
+            self, "ItemImageBucket",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True, # Cleans up images when you delete the stack
+            public_read_access=True,  # Allows images to be viewed via URL
+            block_public_access=s3.BlockPublicAccess.BLOCK_ACLS_ONLY 
+        )
+
+        # 3. Create the PostgreSQL Database
         db_instance = rds.DatabaseInstance(
             self,
             "PostgresInstance",
@@ -36,15 +46,13 @@ class CdkApiPostgresStack(Stack):
             deletion_protection=False,
         )
 
-        # 3. Create the Lambda Function
-        # We use Python 3.13 to match your local installation
+        # 4. Create the Lambda Function
         api_lambda = _lambda.Function(
             self,
             "ApiHandler",
             runtime=_lambda.Runtime.PYTHON_3_13,
             handler="handler.main",
             timeout=Duration.seconds(30),
-            # This part uses Docker to package pg8000
             code=_lambda.Code.from_asset(
                 "lambda",
                 bundling=BundlingOptions(
@@ -60,27 +68,26 @@ class CdkApiPostgresStack(Stack):
             environment={
                 "DB_SECRET_ARN": db_instance.secret.secret_arn,
                 "DB_NAME": "mydb",
+                "BUCKET_NAME": image_bucket.bucket_name, # Tells Lambda where to upload
             },
         )
 
-        # 4. Permissions & Networking (The "Security Bridge")
-        # Allows Lambda to read the DB password from Secrets Manager
+        # 5. Permissions & Networking
         db_instance.secret.grant_read(api_lambda)
-
-        # Opens the network port (5432) so Lambda can talk to Postgres
         db_instance.connections.allow_default_port_from(api_lambda)
+        
+        # Grant Lambda permission to Write/Upload to the S3 Bucket
+        image_bucket.grant_put(api_lambda)
 
-        # 5. API Gateway
-        # This creates the public URL for your Lambda
+        # 6. API Gateway Setup
         api = apigw.LambdaRestApi(self, "MyApi", handler=api_lambda, proxy=False)
 
-     # 1. This handles the base /items (GET all and POST)
+        # Define /items resource
         items = api.root.add_resource("items")
         items.add_method("GET")
         items.add_method("POST")
 
-        # 2. This handles /items/{id} (GET one, PUT, and DELETE)
-        # We use your 'items' variable to add a sub-resource
+        # Define /items/{id} resource
         item_detail = items.add_resource("{proxy+}")
         item_detail.add_method("GET")
         item_detail.add_method("PUT")
