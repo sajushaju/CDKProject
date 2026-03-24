@@ -2,7 +2,8 @@ name: AWS CDK Deploy
 
 on:
   push:
-    branches: [ main ] # This triggers the robot every time you push to main
+    # 1. Now we watch all three branches
+    branches: [ main, dev, test ]
 
 jobs:
   deploy:
@@ -19,18 +20,38 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest moto pytest-mock # Tools for testing
+          pip install pytest moto pytest-mock
 
       - name: Run Unit Tests
         run: |
-          python -m pytest -v # If tests fail, it stops here!
+          python -m pytest -v 
           
       - name: Install AWS CDK
         run: npm install -g aws-cdk
 
-      - name: CDK Deploy
-        run: cdk deploy --all --require-approval never
+      # 2. THE SMART DEPLOY STEPS
+      # Each step only runs IF you pushed to that specific branch.
+
+      - name: Deploy to DEV
+        if: github.ref == 'refs/heads/dev'
+        run: cdk deploy CdkApiPostgresStack-dev -c env=dev --require-approval never
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: "eu-central-1" # Change this if your region is different
+          AWS_DEFAULT_REGION: "eu-central-1"
+
+      - name: Deploy to TEST
+        if: github.ref == 'refs/heads/test'
+        run: cdk deploy CdkApiPostgresStack-test -c env=test --require-approval never
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: "eu-central-1"
+
+      - name: Deploy to PRODUCTION
+        if: github.ref == 'refs/heads/main'
+        run: cdk deploy CdkApiPostgresStack-prod -c env=prod --require-approval never
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: "eu-central-1"
