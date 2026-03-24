@@ -114,7 +114,13 @@ class CdkApiPostgresStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # 1. Create a VPC (Network) - Unique name per env
-        vpc = ec2.Vpc(self, f"MyApiVpc-{target_env}", max_azs=2)
+        
+        vpc = ec2.Vpc(
+    self, 
+    f"MyApiVpc-{target_env}", 
+    max_azs=2,
+    nat_gateways=0 # <-- ADD THIS LINE HERE
+)
 
         # 2. Create the S3 Bucket for Profile Images
         # We use target_env in the bucket name to avoid global name conflicts
