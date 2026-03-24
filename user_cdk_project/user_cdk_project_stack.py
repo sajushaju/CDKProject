@@ -144,6 +144,7 @@ class CdkApiPostgresStack(Stack):
                 ec2.InstanceClass.BURSTABLE3, ec2.InstanceSize.MICRO
             ),
             vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),
             database_name="mydb",
             allocated_storage=20,
             # Safety: Don't delete PROD database accidentally!
@@ -170,6 +171,7 @@ class CdkApiPostgresStack(Stack):
                 ),
             ),
             vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),
             environment={
                 "DB_SECRET_ARN": db_instance.secret.secret_arn,
                 "DB_NAME": "mydb",
