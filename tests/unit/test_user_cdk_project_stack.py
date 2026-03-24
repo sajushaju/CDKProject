@@ -9,7 +9,7 @@ def test_production_resources_created():
     app = core.App()
     
     # 1. Create the stack instance
-    stack = CdkApiPostgresStack(app, "CdkTestStack")
+    stack = CdkApiPostgresStack(app, "CdkTestStack","dev")
     
     # 2. Capture the CloudFormation template
     template = assertions.Template.from_stack(stack)

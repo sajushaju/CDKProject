@@ -7,7 +7,7 @@ from user_cdk_project.user_cdk_project_stack import CdkApiPostgresStack
 def test_infrastructure_configuration():
     app = core.App()
     # 1. Initialize the stack
-    stack = CdkApiPostgresStack(app, "CdkTestStack")
+    stack = CdkApiPostgresStack(app, "CdkTestStack","dev")
     
     # 2. Prepare the template for assertions
     template = assertions.Template.from_stack(stack)
