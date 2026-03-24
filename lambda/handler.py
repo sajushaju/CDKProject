@@ -97,7 +97,7 @@ def main(event, context):
                     if 'png' in header: ext = "png"
                     elif 'jpeg' in header or 'jpg' in header: ext = "jpg"
                     else:
-                        return {'statusCode': 400, 'body': json.dumps({'error': 'Unsupported image type. Only JPG and PNG are allowed.'})}
+                        return {'statusCode': 400, 'body': json.dumps({'error': 'Unsupported image type. Only JPG and PNG are allowed.Pplease note your file name'})}
 
                 try:
                     image_bytes = base64.b64decode(raw_image_data)
