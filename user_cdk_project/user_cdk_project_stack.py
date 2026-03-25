@@ -97,6 +97,7 @@ from aws_cdk import (
     Stack,
     Duration,
     RemovalPolicy,
+    CfnOutput,
     aws_ec2 as ec2,
     aws_rds as rds,
     aws_lambda as _lambda,
@@ -114,13 +115,9 @@ class CdkApiPostgresStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # 1. Create a VPC (Network) - Unique name per env
-        
-        vpc = ec2.Vpc(
-    self, 
-    f"MyApiVpc-{target_env}", 
-    max_azs=2,
-    nat_gateways=0 # <-- ADD THIS LINE HERE
-)
+        # vpc = ec2.Vpc(self, f"MyApiVpc-{target_env}", max_azs=2)
+        vpc = ec2.Vpc(self, "MyApiVpc", max_azs=2, nat_gateways=1)
+
 
         # 2. Create the S3 Bucket for Profile Images
         # We use target_env in the bucket name to avoid global name conflicts
@@ -150,6 +147,41 @@ class CdkApiPostgresStack(Stack):
             # Safety: Don't delete PROD database accidentally!
             removal_policy=RemovalPolicy.DESTROY if target_env != "prod" else RemovalPolicy.RETAIN,
             deletion_protection=True if target_env == "prod" else False,
+        )
+
+        # 3.5 Create SSM Bastion for private RDS tunnel access
+        bastion_sg = ec2.SecurityGroup(
+            self,
+            f"BastionSg-{target_env}",
+            vpc=vpc,
+            allow_all_outbound=True,
+            description="Bastion SG for SSM port forwarding to RDS",
+        )
+
+        bastion_role = iam.Role(
+            self,
+            f"BastionRole-{target_env}",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")
+            ],
+        )
+
+        bastion = ec2.Instance(
+            self,
+            f"RdsTunnelBastion-{target_env}",
+            vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
+            instance_type=ec2.InstanceType("t3.nano"),
+            machine_image=ec2.MachineImage.latest_amazon_linux2023(),
+            security_group=bastion_sg,
+            role=bastion_role,
+        )
+
+        # Allow bastion to access Postgres on RDS
+        db_instance.connections.allow_default_port_from(
+            bastion,
+            "Allow bastion access to Postgres",
         )
 
         # 4. Create the Lambda Function
@@ -196,3 +228,7 @@ class CdkApiPostgresStack(Stack):
         item_detail.add_method("GET")
         item_detail.add_method("PUT")
         item_detail.add_method("DELETE")
+
+        # Helpful outputs for SSM tunnel commands
+        CfnOutput(self, f"BastionInstanceId-{target_env}", value=bastion.instance_id)
+        CfnOutput(self, f"RdsEndpoint-{target_env}", value=db_instance.db_instance_endpoint_address)
